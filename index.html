@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>今天吃什麼？轉盤</title>
+<style>
+  :root {
+    --bg: #fff8f0;
+    --card: #ffffff;
+    --text: #2d2a26;
+    --muted: #8a8278;
+    --accent: #ff6b35;
+    --accent-dark: #e0531f;
+    --border: #f0e2d2;
+    --shadow: 0 6px 24px rgba(120, 70, 20, 0.10);
+    --excluded: #d9d4cd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1a18;
+      --card: #2a2724;
+      --text: #f2ede6;
+      --muted: #a39b90;
+      --border: #3d3833;
+      --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+      --excluded: #4a4540;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header { text-align: center; padding: 28px 16px 8px; }
+  header h1 { margin: 0; font-size: 2rem; }
+  header p { margin: 6px 0 0; color: var(--muted); }
+
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: 20px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 1.15rem; }
+
+  /* 轉盤 */
+  .wheel-card { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .wheel-wrap { position: relative; width: min(100%, 440px); aspect-ratio: 1; }
+  #wheel { width: 100%; height: 100%; display: block; }
+  .pointer {
+    position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 18px solid transparent; border-right: 18px solid transparent;
+    border-top: 34px solid var(--accent);
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,.3));
+    z-index: 2;
+  }
+  .spin-btn {
+    font-size: 1.25rem; font-weight: 700;
+    padding: 14px 48px; border: none; border-radius: 999px;
+    background: var(--accent); color: #fff; cursor: pointer;
+    box-shadow: 0 4px 0 var(--accent-dark);
+    transition: transform .1s, box-shadow .1s, opacity .2s;
+  }
+  .spin-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--accent-dark); }
+  .spin-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .options { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: center; color: var(--muted); font-size: .95rem; }
+  .options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .options select { font: inherit; padding: 2px 4px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+
+  /* 右側 */
+  .side { display: flex; flex-direction: column; gap: 20px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .chip {
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    padding: 6px 12px; border-radius: 999px; cursor: pointer; font: inherit; font-size: .9rem;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .add-row { display: flex; gap: 8px; }
+  .add-row input {
+    flex: 1; min-width: 0; font: inherit; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text);
+  }
+  .add-row input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .btn {
+    font: inherit; padding: 10px 16px; border-radius: 10px; border: none; cursor: pointer;
+    background: var(--accent); color: #fff; font-weight: 600;
+  }
+  .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn.ghost:hover { color: var(--accent); border-color: var(--accent); }
+  .hint { color: var(--muted); font-size: .85rem; margin: 8px 0 0; min-height: 1.2em; }
+  .hint.error { color: #e5484d; }
+
+  ul.list { list-style: none; margin: 12px 0 0; padding: 0; max-height: 260px; overflow-y: auto; }
+  ul.list li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 4px; border-bottom: 1px dashed var(--border);
+  }
+  ul.list li:last-child { border-bottom: none; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .item-name { flex: 1; overflow-wrap: anywhere; }
+  .item-name.excluded { color: var(--muted); text-decoration: line-through; }
+  .tag { font-size: .75rem; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; }
+  .del {
+    border: none; background: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; padding: 2px 6px; border-radius: 6px;
+  }
+  .del:hover { color: #e5484d; background: rgba(229,72,77,.1); }
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .card-head h2 { margin: 0; }
+  .empty { color: var(--muted); text-align: center; padding: 16px 0; }
+  .history-time { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+
+  /* 結果彈窗 */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  .overlay.show { display: flex; animation: fade .2s ease-out; }
+  .modal {
+    background: var(--card); border-radius: 20px; padding: 28px 24px; text-align: center;
+    width: min(100%, 380px); box-shadow: var(--shadow); animation: pop .35s cubic-bezier(.2,1.4,.4,1);
+  }
+  .modal .emoji { font-size: 3rem; }
+  .modal .label { color: var(--muted); margin: 8px 0 4px; }
+  .modal .result { font-size: 2rem; font-weight: 800; color: var(--accent); margin: 0 0 20px; overflow-wrap: anywhere; }
+  .modal .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  @keyframes fade { from { opacity: 0; } }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } }
+
+  footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 12px 16px 28px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🍱 今天吃什麼？</h1>
+  <p>選擇困難救星：把想吃的丟進來，交給轉盤決定！</p>
+</header>
+
+<main>
+  <!-- 轉盤區 -->
+  <section class="card wheel-card">
+    <div class="wheel-wrap">
+      <div class="pointer"></div>
+      <canvas id="wheel"></canvas>
+    </div>
+    <button id="spinBtn" class="spin-btn">開始轉！</button>
+    <div class="options">
+      <label><input type="checkbox" id="excludeToggle" checked> 排除最近吃過的</label>
+      <label>最近
+        <select id="excludeCount">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+        </select> 筆
+      </label>
+      <label><input type="checkbox" id="soundToggle" checked> 音效</label>
+    </div>
+  </section>
+
+  <div class="side">
+    <!-- 候選清單 -->
+    <section class="card">
+      <h2>🍽️ 候選清單</h2>
+      <div class="presets" id="presets"></div>
+      <form class="add-row" id="addForm">
+        <input id="itemInput" type="text" maxlength="12" placeholder="輸入食物或餐廳，按 Enter 新增" autocomplete="off">
+        <button class="btn" type="submit">新增</button>
+      </form>
+      <p class="hint" id="hint"></p>
+      <ul class="list" id="itemList"></ul>
+    </section>
+
+    <!-- 歷史紀錄 -->
+    <section class="card">
+      <div class="card-head">
+        <h2>📜 吃過紀錄</h2>
+        <button class="btn ghost" id="clearHistory">清除</button>
+      </div>
+      <ul class="list" id="historyList"></ul>
+    </section>
+  </div>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="resultText">
+    <div class="emoji" id="resultEmoji">🎉</div>
+    <p class="label">今天就吃</p>
+    <p class="result" id="resultText"></p>
+    <div class="actions">
+      <button class="btn" id="confirmBtn">就決定是你了！</button>
+      <button class="btn ghost" id="againBtn">不要，再轉一次</button>
+    </div>
+  </div>
+</div>
+
+<footer>資料只會存在你自己的瀏覽器（localStorage），重新整理也不會不見。</footer>
+
+<script>
+  // ===== 設定 =====
+  const MIN_ITEMS = 2;
+  const MAX_ITEMS = 20;
+  const MAX_HISTORY = 20;
+  const COLORS = ["#ff6b35", "#f7c548", "#4ecdc4", "#5c80bc", "#e56399", "#7bc950",
+                  "#ff9f1c", "#9b5de5", "#00bbf9", "#f15bb5", "#2ec4b6", "#e76f51"];
+  const PRESETS = {
+    "🍜 午餐": ["便當", "牛肉麵", "滷肉飯", "麥當勞", "拉麵", "水餃", "義大利麵", "自助餐"],
+    "🍲 晚餐": ["火鍋", "燒肉", "咖哩飯", "牛排", "炒飯", "壽司", "韓式料理", "泰式料理"],
+    "🧋 飲料": ["珍珠奶茶", "紅茶拿鐵", "四季春", "冬瓜檸檬", "多多綠", "美式咖啡"],
+    "🌙 宵夜": ["鹹酥雞", "泡麵", "滷味", "炸雞", "臭豆腐", "便利商店"]
+  };
+  const EMOJIS = ["🎉", "😋", "🤤", "🥳", "👍", "✨"];
+
+  // ===== 狀態 =====
+  const store = {
+    get(key, fallback) {
+      try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+      catch { return fallback; }
+    },
+    set(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 無痕模式等情況忽略 */ }
+    }
+  };
+
+  let items = store.get("wte-items", PRESETS["🍜 午餐"].slice());
+  let history = store.get("wte-history", []);
+  let rotation = 0;          // 目前轉盤角度（弧度）
+  let spinning = false;
+  let pendingResult = null;
+
+  // ===== DOM =====
+  const $ = id => document.getElementById(id);
+  const canvas = $("wheel");
+  const ctx = canvas.getContext("2d");
+  const spinBtn = $("spinBtn");
+  const hint = $("hint");
+
+  // ===== 工具 =====
+  function save() {
+    store.set("wte-items", items);
+    store.set("wte-history", history);
+  }
+
+  function showHint(msg, isError = false) {
+    hint.textContent = msg;
+    hint.classList.toggle("error", isError);
+  }
+
+  // 最近吃過、要被排除的項目
+  function excludedSet() {
+    if (!$("excludeToggle").checked) return new Set();
+    const n = Number($("excludeCount").value);
+    return new Set(history.slice(0, n).map(h => h.name));
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // ===== 畫轉盤 =====
+  function resizeCanvas() {
+    const size = canvas.clientWidth;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawWheel();
+  }
+
+  function drawWheel() {
+    const size = canvas.clientWidth;
+    const r = size / 2;
+    ctx.clearRect(0, 0, size, size);
+
+    if (items.length === 0) {
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--excluded");
+      ctx.beginPath(); ctx.arc(r, r, r - 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#888"; ctx.font = "18px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("先新增幾個選項吧！", r, r);
+      return;
+    }
+
+    const excluded = excludedSet();
+    const arc = (Math.PI * 2) / items.length;
+    const excludedColor = getComputedStyle(document.documentElement).getPropertyValue("--excluded").trim();
+
+    items.forEach((name, i) => {
+      const start = rotation + i * arc - Math.PI / 2;
+      const isEx = excluded.has(name);
+
+      ctx.beginPath();
+      ctx.moveTo(r, r);
+      ctx.arc(r, r, r - 6, start, start + arc);
+      ctx.closePath();
+      ctx.fillStyle = isEx ? excludedColor : COLORS[i % COLORS.length];
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.8)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // 文字
+      ctx.save();
+      ctx.translate(r, r);
+      ctx.rotate(start + arc / 2);
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      const fontSize = Math.max(11, Math.min(20, r / 10, (arc * r) / 2.2));
+      ctx.font = `bold ${fontSize}px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+      ctx.fillStyle = isEx ? "#8a8278" : "#fff";
+      ctx.shadowColor = isEx ? "transparent" : "rgba(0,0,0,.35)";
+      ctx.shadowBlur = 3;
+      ctx.fillText(name, r - 20, 0);
+      ctx.restore();
+    });
+
+    // 外框與中心
+    ctx.beginPath();
+    ctx.arc(r, r, r - 4, 0, Math.PI * 2);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 6;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(r, r, r * 0.12, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.font = `${r * 0.12}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("🍴", r, r + 1);
+  }
+
+  // ===== 音效（Web Audio，不用外部檔案） =====
+  let audioCtx = null;
+  function tick() {
+    if (!$("soundToggle").checked) return;
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.frequency.value = 900;
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.05);
+    } catch { /* 不支援就安靜 */ }
+  }
+
+  // ===== 轉動 =====
+  function spin() {
+    if (spinning) return;
+    if (items.length < MIN_ITEMS) {
+      showHint(`至少要有 ${MIN_ITEMS} 個選項才能轉喔！`, true);
+      return;
+    }
+
+    // 找出可以抽的項目（排除最近吃過的）
+    const excluded = excludedSet();
+    let candidates = items.map((_, i) => i).filter(i => !excluded.has(items[i]));
+    if (candidates.length === 0) {
+      candidates = items.map((_, i) => i);
+      showHint("全部都最近吃過了，這次不排除 😅");
+    } else {
+      showHint("");
+    }
+
+    const target = candidates[Math.floor(Math.random() * candidates.length)];
+    const arc = (Math.PI * 2) / items.length;
+
+    // 計算讓 target 停在指針（正上方）的最終角度
+    const jitter = (Math.random() - 0.5) * arc * 0.7;
+    const want = -(target + 0.5) * arc + jitter;
+    const current = ((rotation % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    let delta = ((want - current) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    const spins = 5 + Math.floor(Math.random() * 3);
+    const startRot = rotation;
+    const totalDelta = spins * Math.PI * 2 + delta;
+    const duration = 4200 + Math.random() * 800;
+    const startTime = performance.now();
+    let lastSeg = Math.floor(startRot / arc);
+
+    spinning = true;
+    spinBtn.disabled = true;
+
+    function frame(now) {
+      const t = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - t, 4); // easeOutQuart：先快後慢
+      rotation = startRot + totalDelta * eased;
+      drawWheel();
+
+      const seg = Math.floor(rotation / arc);
+      if (seg !== lastSeg) { tick(); lastSeg = seg; }
+
+      if (t < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        spinning = false;
+        spinBtn.disabled = false;
+        showResult(items[target]);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ===== 結果彈窗 =====
+  function showResult(name) {
+    pendingResult = name;
+    $("resultText").textContent = name;
+    $("resultEmoji").textContent = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+    $("overlay").classList.add("show");
+    $("confirmBtn").focus();
+  }
+
+  function closeResult() {
+    $("overlay").classList.remove("show");
+    pendingResult = null;
+  }
+
+  $("confirmBtn").addEventListener("click", () => {
+    history.unshift({ name: pendingResult, time: Date.now() });
+    history = history.slice(0, MAX_HISTORY);
+    save();
+    closeResult();
+    renderAll();
+    showHint("已記錄！吃飽再來 😋");
+  });
+
+  $("againBtn").addEventListener("click", () => {
+    closeResult();
+    spin();
+  });
+
+  $("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeResult(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeResult(); });
+
+  // ===== 清單操作 =====
+  function addItem(raw) {
+    const name = raw.trim();
+    if (!name) { showHint("請輸入名稱", true); return false; }
+    if (items.includes(name)) { showHint(`「${name}」已經在清單裡了`, true); return false; }
+    if (items.length >= MAX_ITEMS) { showHint(`最多只能放 ${MAX_ITEMS} 個選項`, true); return false; }
+    items.push(name);
+    save();
+    renderAll();
+    showHint(`已新增「${name}」`);
+    return true;
+  }
+
+  function removeItem(index) {
+    if (spinning) return;
+    const [removed] = items.splice(index, 1);
+    save();
+    renderAll();
+    showHint(`已刪除「${removed}」`);
+  }
+
+  function loadPreset(key) {
+    if (spinning) return;
+    items = PRESETS[key].slice();
+    save();
+    renderAll();
+    showHint(`已套用「${key}」清單`);
+  }
+
+  $("addForm").addEventListener("submit", e => {
+    e.preventDefault();
+    if (addItem($("itemInput").value)) $("itemInput").value = "";
+  });
+
+  $("clearHistory").addEventListener("click", () => {
+    if (history.length === 0) return;
+    if (!confirm("確定要清除所有吃過紀錄嗎？")) return;
+    history = [];
+    save();
+    renderAll();
+  });
+
+  spinBtn.addEventListener("click", spin);
+  $("excludeToggle").addEventListener("change", renderAll);
+  $("excludeCount").addEventListener("change", renderAll);
+
+  // ===== 畫面渲染 =====
+  function renderPresets() {
+    const box = $("presets");
+    box.innerHTML = "";
+    Object.keys(PRESETS).forEach(key => {
+      const b = document.createElement("button");
+      b.className = "chip";
+      b.type = "button";
+      b.textContent = key;
+      b.addEventListener("click", () => loadPreset(key));
+      box.appendChild(b);
+    });
+    const clear = document.createElement("button");
+    clear.className = "chip";
+    clear.type = "button";
+    clear.textContent = "🗑️ 清空";
+    clear.addEventListener("click", () => {
+      if (spinning || items.length === 0) return;
+      if (!confirm("確定要清空候選清單嗎？")) return;
+      items = [];
+      save();
+      renderAll();
+    });
+    box.appendChild(clear);
+  }
+
+  function renderItems() {
+    const list = $("itemList");
+    const excluded = excludedSet();
+    if (items.length === 0) {
+      list.innerHTML = `<li class="empty">清單是空的，新增一些或點上面的範本吧！</li>`;
+      return;
+    }
+    list.innerHTML = items.map((name, i) => `
+      <li>
+        <span class="dot" style="background:${excluded.has(name) ? "var(--excluded)" : COLORS[i % COLORS.length]}"></span>
+        <span class="item-name ${excluded.has(name) ? "excluded" : ""}">${escapeHtml(name)}</span>
+        ${excluded.has(name) ? '<span class="tag">最近吃過</span>' : ""}
+        <button class="del" data-index="${i}" title="刪除" aria-label="刪除 ${escapeHtml(name)}">✕</button>
+      </li>`).join("");
+    list.querySelectorAll(".del").forEach(btn =>
+      btn.addEventListener("click", () => removeItem(Number(btn.dataset.index))));
+  }
+
+  function renderHistory() {
+    const list = $("historyList");
+    if (history.length === 0) {
+      list.innerHTML = `<li class="empty">還沒有紀錄，轉一下吧！</li>`;
+      return;
+    }
+    list.innerHTML = history.map(h => {
+      const d = new Date(h.time);
+      const time = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      return `<li><span class="item-name">${escapeHtml(h.name)}</span><span class="history-time">${time}</span></li>`;
+    }).join("");
+  }
+
+  function renderAll() {
+    renderItems();
+    renderHistory();
+    drawWheel();
+    spinBtn.disabled = spinning || items.length < MIN_ITEMS;
+  }
+
+  // ===== 初始化 =====
+  renderPresets();
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+  renderAll();
+</script>
+</body>
+</html>
